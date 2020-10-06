@@ -19,6 +19,7 @@ public:
    virtual ~InterpreterVisitor() {}
 
    virtual void VisitBinaryOperator (BinaryOperator * bop) {
+      //llvm::errs() << "binop: " << bop->getOpcodeStr() << "\n";
 	   VisitStmt(bop);
 	   mEnv->binop(bop);
    }
