@@ -92,6 +92,21 @@ public:
         return mEntry;
     }
 
+    void unop(UnaryOperator *uop) {
+        Expr *sub = uop->getSubExpr();
+        int val = mStack.back().getStmtVal(sub);
+        int result = 0;
+
+        switch (uop->getOpcode()) {
+            case UO_Plus:   result = val;       break;
+            case UO_Minus:  result = -val;      break;
+            default:
+                llvm::errs() << "Unsupported unary operator " << uop->getOpcodeStr(uop->getOpcode()) << "\n";
+                break;
+        }
+        mStack.back().bindStmt(uop, result);
+    }
+
     void binop(BinaryOperator *bop) {
         Expr * left = bop->getLHS();
         Expr * right = bop->getRHS();
@@ -115,6 +130,9 @@ public:
                 case BO_GT:     result = lhs > rhs;     break;
                 case BO_LT:     result = lhs < rhs;     break;
                 case BO_EQ:     result = lhs == rhs;    break;
+                default:
+                    llvm::errs() << "Unsupported binary operator " << bop->getOpcodeStr() << "\n";
+                    break;
             }
             mStack.back().bindStmt(bop, result);
         }

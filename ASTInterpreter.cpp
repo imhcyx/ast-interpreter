@@ -18,6 +18,10 @@ public:
    : EvaluatedExprVisitor(context), mEnv(env) {}
    virtual ~InterpreterVisitor() {}
 
+   virtual void VisitUnaryOperator (UnaryOperator * uop) {
+	   VisitStmt(uop);
+      mEnv->unop(uop);
+   }
    virtual void VisitBinaryOperator (BinaryOperator * bop) {
       //llvm::errs() << "binop: " << bop->getOpcodeStr() << "\n";
 	   VisitStmt(bop);
