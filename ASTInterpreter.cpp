@@ -14,11 +14,8 @@ using namespace clang;
 class InterpreterVisitor : 
     public EvaluatedExprVisitor<InterpreterVisitor> {
 public:
-    explicit InterpreterVisitor(const ASTContext &context)
-    : EvaluatedExprVisitor(context), mStack(), mFree(NULL), mMalloc(NULL), mInput(NULL), mOutput(NULL), mEntry(NULL) {}
-    virtual ~InterpreterVisitor() {}
-
-    void init(TranslationUnitDecl * unit) {
+    explicit InterpreterVisitor(const ASTContext &context, TranslationUnitDecl * unit)
+    : EvaluatedExprVisitor(context), mStack(), mFree(NULL), mMalloc(NULL), mInput(NULL), mOutput(NULL), mEntry(NULL) {
         for (TranslationUnitDecl::decl_iterator i =unit->decls_begin(), e = unit->decls_end(); i != e; ++ i) {
             if (FunctionDecl * fdecl = dyn_cast<FunctionDecl>(*i) ) {
                 if (fdecl->getName().equals("FREE")) mFree = fdecl;
@@ -31,7 +28,10 @@ public:
         mStack.push_back(StackFrame());
     }
 
+    virtual ~InterpreterVisitor() {}
+
     void start() {
+        // TODO: implement as function call instead
         VisitStmt(mEntry->getBody());
     }
 
@@ -174,17 +174,17 @@ private:
 
 class InterpreterConsumer : public ASTConsumer {
 public:
-    explicit InterpreterConsumer(const ASTContext& context) : mVisitor(context) {}
+    explicit InterpreterConsumer(const ASTContext& context) {}
     virtual ~InterpreterConsumer() {}
 
     virtual void HandleTranslationUnit(clang::ASTContext &Context) {
         TranslationUnitDecl * decl = Context.getTranslationUnitDecl();
+        InterpreterVisitor *visitor = new InterpreterVisitor(Context, decl);
 
-        mVisitor.init(decl);
-        mVisitor.start();
-  }
-private:
-    InterpreterVisitor mVisitor;
+        visitor->start();
+
+        delete visitor;
+    }
 };
 
 class InterpreterClassAction : public ASTFrontendAction {
