@@ -122,14 +122,20 @@ public:
 
     virtual void VisitIfStmt(IfStmt *stmt) {
         Expr *cond = stmt->getCond();
-        Visit(cond);
 
-        int val = mStack.back().getStmtVal(cond);
-        if (val) {
+        if (Visit(cond), mStack.back().getStmtVal(cond)) {
             VisitStmt(stmt->getThen());
         }
         else {
             VisitStmt(stmt->getElse());
+        }
+    }
+
+    virtual void VisitWhileStmt(WhileStmt *stmt) {
+        Expr *cond = stmt->getCond();
+
+        while (Visit(cond), mStack.back().getStmtVal(cond)) {
+            VisitStmt(stmt->getBody());
         }
     }
 
