@@ -72,7 +72,9 @@ public:
                 case BO_Mul:    result = lhs * rhs;     break;
                 case BO_Div:    result = lhs / rhs;     break;
                 case BO_GT:     result = lhs > rhs;     break;
+                case BO_GE:     result = lhs >= rhs;    break;
                 case BO_LT:     result = lhs < rhs;     break;
+                case BO_LE:     result = lhs <= rhs;    break;
                 case BO_EQ:     result = lhs == rhs;    break;
             }
             mStack.back().bindStmt(bop, result);
@@ -124,10 +126,10 @@ public:
         Expr *cond = stmt->getCond();
 
         if (Visit(cond), mStack.back().getStmtVal(cond)) {
-            VisitStmt(stmt->getThen());
+            Visit(stmt->getThen());
         }
         else {
-            VisitStmt(stmt->getElse());
+            Visit(stmt->getElse());
         }
     }
 
@@ -135,7 +137,17 @@ public:
         Expr *cond = stmt->getCond();
 
         while (Visit(cond), mStack.back().getStmtVal(cond)) {
-            VisitStmt(stmt->getBody());
+            Visit(stmt->getBody());
+        }
+    }
+
+    virtual void VisitForStmt(ForStmt *stmt) {
+        Stmt *init = stmt->getInit();
+        Expr *cond = stmt->getCond();
+        Expr *inc = stmt->getInc();
+
+        for (Visit(init); Visit(cond), mStack.back().getStmtVal(cond); Visit(inc)) {
+            Visit(stmt->getBody());
         }
     }
 
