@@ -11,6 +11,14 @@ using namespace clang;
 
 #include "Environment.h"
 
+class InterpreterReturnException {
+public:
+    InterpreterReturnException(int retval) : mRetVal(retval) {}
+    int getRetVal() const { return mRetVal; }
+private:
+    int mRetVal;
+};
+
 class InterpreterVisitor : 
     public EvaluatedExprVisitor<InterpreterVisitor> {
 public:
@@ -31,8 +39,7 @@ public:
     virtual ~InterpreterVisitor() {}
 
     void start() {
-        // TODO: implement as function call instead
-        VisitStmt(mEntry->getBody());
+        CallUserFunction(mEntry, 0, NULL);
     }
 
     virtual void VisitUnaryOperator(UnaryOperator * uop) {
@@ -84,7 +91,6 @@ public:
 
     virtual void VisitDeclRefExpr(DeclRefExpr * expr) {
         VisitStmt(expr);
-        mStack.back().setPC(expr);
         if (expr->getType()->isIntegerType()) {
             Decl* decl = expr->getFoundDecl();
 
@@ -95,7 +101,6 @@ public:
 
     virtual void VisitCastExpr(CastExpr * expr) {
         VisitStmt(expr);
-        mStack.back().setPC(expr);
         if (expr->getType()->isIntegerType()) {
             Expr * sub = expr->getSubExpr();
             int val = mStack.back().getStmtVal(sub);
@@ -105,20 +110,26 @@ public:
 
     virtual void VisitCallExpr(CallExpr * call) {
         VisitStmt(call);
-        mStack.back().setPC(call);
         int val = 0;
         FunctionDecl * callee = call->getDirectCallee();
         if (callee == mInput) {
-           llvm::errs() << "Please Input an Integer Value : ";
-           scanf("%d", &val);
+            llvm::errs() << "Please Input an Integer Value : ";
+            scanf("%d", &val);
 
-           mStack.back().bindStmt(call, val);
+            mStack.back().bindStmt(call, val);
         } else if (callee == mOutput) {
             Expr * decl = call->getArg(0);
             val = mStack.back().getStmtVal(decl);
             llvm::errs() << val;
         } else {
-            /// You could add your code here for Function call Return
+            int argcount = call->getNumArgs();
+            int *args = new int(argcount);
+            for (int i = 0; i < argcount; i++) {
+                args[i] = mStack.back().getStmtVal(call->getArg(i));
+            }
+            val = CallUserFunction(callee, argcount, args);
+            delete args;
+            mStack.back().bindStmt(call, val);
         }
     }
 
@@ -129,7 +140,9 @@ public:
             Visit(stmt->getThen());
         }
         else {
-            Visit(stmt->getElse());
+            Stmt *elsestmt = stmt->getElse();
+            if (elsestmt)
+                Visit(elsestmt);
         }
     }
 
@@ -151,6 +164,14 @@ public:
         }
     }
 
+    virtual void VisitReturnStmt(ReturnStmt *stmt) {
+        Expr *expr = stmt->getRetValue();
+        Visit(expr);
+
+        int val = mStack.back().getStmtVal(expr);
+        throw InterpreterReturnException(val);
+    }
+
     virtual void VisitDeclStmt(DeclStmt * declstmt) {
         for (DeclStmt::decl_iterator it = declstmt->decl_begin(), ie = declstmt->decl_end();
                 it != ie; ++ it) {
@@ -170,6 +191,25 @@ private:
     FunctionDecl * mOutput;
 
     FunctionDecl * mEntry;
+
+    int CallUserFunction(FunctionDecl *callee, int argcount, int *args) {
+        int retval = 0;
+
+        mStack.push_back(StackFrame());
+        for (int i = 0; i < argcount; i++) {
+            mStack.back().bindDecl(callee->getParamDecl(i), args[i]);
+        }
+
+        try {
+            VisitStmt(callee->getBody());
+        }
+        catch (InterpreterReturnException e) {
+            retval = e.getRetVal();
+        }
+
+        mStack.pop_back();
+        return retval;
+    }
 };
 
 class InterpreterConsumer : public ASTConsumer {

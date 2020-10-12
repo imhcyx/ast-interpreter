@@ -16,10 +16,8 @@ class StackFrame {
     /// Which are either integer or addresses (also represented using an Integer value)
     std::map<Decl*, int> mVars;
     std::map<Stmt*, int> mExprs;
-    /// The current stmt
-    Stmt * mPC;
 public:
-    StackFrame() : mVars(), mExprs(), mPC() {
+    StackFrame() : mVars(), mExprs() {
     }
 
     void bindDecl(Decl* decl, int val) {
@@ -38,12 +36,6 @@ public:
         }
         assert (mExprs.find(stmt) != mExprs.end());
         return mExprs[stmt];
-    }
-    void setPC(Stmt * stmt) {
-        mPC = stmt;
-    }
-    Stmt * getPC() {
-        return mPC;
     }
 };
 
