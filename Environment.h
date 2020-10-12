@@ -16,16 +16,22 @@ class StackFrame {
     /// Which are either integer or addresses (also represented using an Integer value)
     std::map<Decl*, int> mVars;
     std::map<Stmt*, int> mExprs;
+    StackFrame *mParent;
 public:
-    StackFrame() : mVars(), mExprs() {
+    StackFrame(StackFrame *parent) : mExprs(), mParent(parent) {
     }
 
     void bindDecl(Decl* decl, int val) {
        mVars[decl] = val;
     }
     int getDeclVal(Decl * decl) {
-       assert (mVars.find(decl) != mVars.end());
-       return mVars.find(decl)->second;
+        for (StackFrame *cur = this; cur; cur = cur->mParent) {
+            if (cur->mVars.find(decl) != cur->mVars.end()) {
+                return cur->mVars[decl];
+            }
+        }
+        llvm::errs() << "variable not found\n";
+        abort();
     }
     void bindStmt(Stmt * stmt, int val) {
         mExprs[stmt] = val;
