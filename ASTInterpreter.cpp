@@ -23,7 +23,7 @@ class InterpreterVisitor :
     public EvaluatedExprVisitor<InterpreterVisitor> {
 public:
     explicit InterpreterVisitor(const ASTContext &context)
-    : EvaluatedExprVisitor(context), mStack(), mFree(NULL), mMalloc(NULL), mInput(NULL), mOutput(NULL), mEntry(NULL) {
+    : EvaluatedExprVisitor(context), mStack(), mAS(), mFree(NULL), mMalloc(NULL), mInput(NULL), mOutput(NULL), mEntry(NULL) {
     }
 
     virtual ~InterpreterVisitor() {
@@ -78,6 +78,16 @@ public:
                 Decl * decl = declexpr->getFoundDecl();
                 mStack.back()->bindDecl(decl, val);
             }
+            else if (ArraySubscriptExpr *expr = dyn_cast<ArraySubscriptExpr>(left)) {
+                VisitStmt(expr);
+
+                Expr *lhs = expr->getLHS();
+                Expr *rhs = expr->getRHS();
+                int lval = mStack.back()->getStmtVal(lhs);
+                int rval = mStack.back()->getStmtVal(rhs);
+
+                mAS[lval + rval] = val;
+            }
         }
         else {
             int lhs = mStack.back()->getStmtVal(left);
@@ -99,9 +109,21 @@ public:
         }
     }
 
+    virtual void VisitArraySubscriptExpr(ArraySubscriptExpr *expr) {
+        VisitStmt(expr);
+
+        Expr *lhs = expr->getLHS();
+        Expr *rhs = expr->getRHS();
+        int lval = mStack.back()->getStmtVal(lhs);
+        int rval = mStack.back()->getStmtVal(rhs);
+
+        //llvm::errs() << "array ref: " << lval << "+" << rval << "\n";
+        mStack.back()->bindStmt(expr, mAS[lval + rval]);
+    }
+
     virtual void VisitDeclRefExpr(DeclRefExpr * expr) {
         VisitStmt(expr);
-        if (expr->getType()->isIntegerType()) {
+        if (expr->getType()->getPointeeOrArrayElementType()->isIntegerType()) {
             Decl* decl = expr->getFoundDecl();
 
             int val = mStack.back()->getDeclVal(decl);
@@ -111,7 +133,7 @@ public:
 
     virtual void VisitCastExpr(CastExpr * expr) {
         VisitStmt(expr);
-        if (expr->getType()->isIntegerType()) {
+        if (expr->getType()->getPointeeOrArrayElementType()->isIntegerType()) {
             Expr * sub = expr->getSubExpr();
             int val = mStack.back()->getStmtVal(sub);
             mStack.back()->bindStmt(expr, val);
@@ -169,8 +191,14 @@ public:
         Expr *cond = stmt->getCond();
         Expr *inc = stmt->getInc();
 
-        for (Visit(init); Visit(cond), mStack.back()->getStmtVal(cond); Visit(inc)) {
+        if (init) Visit(init);
+        for (;;) {
+            if (cond) {
+                Visit(cond);
+                if (!mStack.back()->getStmtVal(cond)) break;
+            }
             Visit(stmt->getBody());
+            if (inc) Visit(inc);
         }
     }
 
@@ -194,6 +222,7 @@ public:
 
 private:
     std::vector<StackFrame*> mStack;
+    AddressSpace mAS;
 
     FunctionDecl * mFree;				/// Declartions to the built-in functions
     FunctionDecl * mMalloc;
@@ -224,11 +253,16 @@ private:
 
     void HandleVarDecl(VarDecl *decl) {
         int val = 0;
-        Expr *init = decl->getInit();
-        if (init) {
+        const Type *ty = decl->getType().getTypePtr();
+        if (const ConstantArrayType *aty = dyn_cast<ConstantArrayType>(ty)) {
+            int len = aty->getSize().getSExtValue();
+            val = mAS.alloc(len * sizeof(int));
+        }
+        else if (Expr *init = decl->getInit()) {
             Visit(init);
             val = mStack.back()->getStmtVal(init);
         }
+        //llvm::errs() << "decl " << decl->getDeclName().getAsString() << "(" << decl << "): " << val << "\n";
         mStack.back()->bindDecl(decl, val);
     }
 };

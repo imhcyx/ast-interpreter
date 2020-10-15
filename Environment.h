@@ -45,13 +45,26 @@ public:
     }
 };
 
-/// Heap maps address to a value
-/*
-class Heap {
+class AddressSpace {
+    // This class stores heap and arrays in stack
+    std::vector<int> mAllocs;
 public:
-    int Malloc(int size) ;
-    void Free (int addr) ;
-    void Update(int addr, int val) ;
-    int get(int addr);
+    AddressSpace() : mAllocs() {}
+
+    int &operator [](int ptr) {
+        return mAllocs[ptr];
+    }
+
+    int alloc(int size) {
+        int ptr = mAllocs.size() * sizeof(int);
+        while (size > 0) {
+            mAllocs.push_back(0);
+            size -= sizeof(int);
+        }
+        return ptr;
+    }
+
+    void free(int ptr) {
+        // not implemented
+    }
 };
-*/
