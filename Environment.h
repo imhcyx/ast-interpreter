@@ -56,7 +56,7 @@ public:
     }
 
     int alloc(int size) {
-        int ptr = mAllocs.size() * sizeof(int);
+        int ptr = mAllocs.size();
         while (size > 0) {
             mAllocs.push_back(0);
             size -= sizeof(int);
