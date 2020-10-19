@@ -63,8 +63,4 @@ public:
         }
         return ptr;
     }
-
-    void free(int ptr) {
-        // not implemented
-    }
 };

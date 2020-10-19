@@ -41,6 +41,7 @@ public:
                 else if (fdecl->getName().equals("GET")) mInput = fdecl;
                 else if (fdecl->getName().equals("PRINT")) mOutput = fdecl;
                 else if (fdecl->getName().equals("main")) mEntry = fdecl;
+                mStack.back()->bindDecl(fdecl, -1); // fix errors when visiting a function DeclRefExpr
             }
             else if (VarDecl * vdecl = dyn_cast<VarDecl>(*i)) {
                 HandleVarDecl(vdecl);
@@ -62,6 +63,8 @@ public:
         switch (uop->getOpcode()) {
             case UO_Plus:   result = val;       break;
             case UO_Minus:  result = -val;      break;
+            case UO_Deref:  result = mAS[val];  break;
+            // TODO: dereference
         }
         mStack.back()->bindStmt(uop, result);
     }
@@ -88,6 +91,16 @@ public:
 
                 mAS[lval + rval] = val;
             }
+            else if (UnaryOperator *expr = dyn_cast<UnaryOperator>(left)) {
+                if (expr->getOpcode() == UO_Deref) {
+                    VisitStmt(expr);
+
+                    Expr *sub = expr->getSubExpr();
+                    int subval = mStack.back()->getStmtVal(sub);
+
+                    mAS[subval] = val;
+                }
+            }
         }
         else {
             int lhs = mStack.back()->getStmtVal(left);
@@ -109,6 +122,30 @@ public:
         }
     }
 
+    virtual void VisitUnaryExprOrTypeTraitExpr(UnaryExprOrTypeTraitExpr *expr) {
+        int val = 0;
+        if (expr->getKind() == UETT_SizeOf) {
+            if (expr->isArgumentType()) {
+                const Type *t = expr->getArgumentType().getTypePtr();
+                if (t->isIntegerType()) {
+                    // simplified implementation: regard all integer types as int
+                    val = 4;
+                }
+                else if (t->isPointerType()) {
+                    val = 4;
+                }
+            }
+        }
+        mStack.back()->bindStmt(expr, val);
+    }
+
+    virtual void VisitParenExpr(ParenExpr *expr) {
+        VisitStmt(expr);
+
+        int val = mStack.back()->getStmtVal(expr->getSubExpr());
+        mStack.back()->bindStmt(expr, val);
+    }
+
     virtual void VisitArraySubscriptExpr(ArraySubscriptExpr *expr) {
         VisitStmt(expr);
 
@@ -123,21 +160,17 @@ public:
 
     virtual void VisitDeclRefExpr(DeclRefExpr * expr) {
         VisitStmt(expr);
-        if (expr->getType()->getPointeeOrArrayElementType()->isIntegerType()) {
-            Decl* decl = expr->getFoundDecl();
+        Decl* decl = expr->getFoundDecl();
 
-            int val = mStack.back()->getDeclVal(decl);
-            mStack.back()->bindStmt(expr, val);
-        }
+        int val = mStack.back()->getDeclVal(decl);
+        mStack.back()->bindStmt(expr, val);
     }
 
     virtual void VisitCastExpr(CastExpr * expr) {
         VisitStmt(expr);
-        if (expr->getType()->getPointeeOrArrayElementType()->isIntegerType()) {
-            Expr * sub = expr->getSubExpr();
-            int val = mStack.back()->getStmtVal(sub);
-            mStack.back()->bindStmt(expr, val);
-        }
+        Expr * sub = expr->getSubExpr();
+        int val = mStack.back()->getStmtVal(sub);
+        mStack.back()->bindStmt(expr, val);
     }
 
     virtual void VisitCallExpr(CallExpr * call) {
@@ -153,6 +186,12 @@ public:
             Expr * decl = call->getArg(0);
             val = mStack.back()->getStmtVal(decl);
             llvm::errs() << val;
+        } else if (callee == mMalloc) {
+            Expr * decl = call->getArg(0);
+            val = mStack.back()->getStmtVal(decl);
+            mStack.back()->bindStmt(call, mAS.alloc(val));
+        } else if (callee == mFree) {
+            // not implemented
         } else {
             int argcount = call->getNumArgs();
             int *args = new int(argcount);
