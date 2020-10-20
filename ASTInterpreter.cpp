@@ -178,14 +178,14 @@ public:
         int val = 0;
         FunctionDecl * callee = call->getDirectCallee();
         if (callee == mInput) {
-            llvm::errs() << "Please Input an Integer Value : ";
+            llvm::outs() << "Please Input an Integer Value : ";
             scanf("%d", &val);
 
             mStack.back()->bindStmt(call, val);
         } else if (callee == mOutput) {
             Expr * decl = call->getArg(0);
             val = mStack.back()->getStmtVal(decl);
-            llvm::errs() << val;
+            llvm::outs() << val << '\n';
         } else if (callee == mMalloc) {
             Expr * decl = call->getArg(0);
             val = mStack.back()->getStmtVal(decl);
